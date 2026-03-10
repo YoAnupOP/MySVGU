@@ -1,37 +1,46 @@
 "use client";
 
-import { useState, useEffect } from 'react';
+import { useCallback } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 
-interface User {
-  firstName?: string;
-  lastName?: string;
-  email?: string;
-  profileImageUrl?: string;
-}
+import type { AuthUser } from "@/lib/auth-shared";
+import { fetchCurrentUser, queryKeys } from "@/lib/server-state";
 
 export function useAuth() {
-  const [user, setUser] = useState<User | null>(null);
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
-  const [isLoading, setIsLoading] = useState(true);
+  const queryClient = useQueryClient();
+  const authQuery = useQuery({
+    queryKey: queryKeys.authMe,
+    queryFn: fetchCurrentUser,
+    staleTime: 5 * 60_000,
+    gcTime: 30 * 60_000,
+    retry: false,
+  });
 
-  useEffect(() => {
-    // PROTOTYPE MODE - Always authenticated for development
-    // Replace with real auth logic later
-    const mockUser: User = {
-      firstName: "Anup",
-      lastName: "Student", 
-      email: "anup.student@svgu.edu",
-      profileImageUrl: undefined
-    };
-    
-    setUser(mockUser);
-    setIsAuthenticated(true);
-    setIsLoading(false);
-  }, []);
+  const logout = useCallback(async () => {
+    try {
+      await fetch("/api/auth/logout", {
+        method: "POST",
+        credentials: "include",
+      });
+      queryClient.clear();
+      queryClient.setQueryData<AuthUser | null>(queryKeys.authMe, null);
+      window.location.href = "/landing";
+    } catch (error) {
+      console.error("Logout failed:", error);
+    }
+  }, [queryClient]);
+
+  const refresh = useCallback(() => {
+    void queryClient.invalidateQueries({ queryKey: queryKeys.authMe });
+  }, [queryClient]);
+
+  const user = authQuery.data ?? null;
 
   return {
     user,
-    isAuthenticated,
-    isLoading
+    isAuthenticated: Boolean(user),
+    isLoading: authQuery.isLoading,
+    logout,
+    refresh,
   };
-} 
+}

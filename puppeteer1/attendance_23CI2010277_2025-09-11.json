@@ -1,0 +1,48 @@
+{
+  "studentInfo": {
+    "rollNo": "23CI2010277",
+    "name": "MAHIDA DHANRAJSINH DIGPALSINH"
+  },
+  "subjects": [
+    {
+      "name": "Search Engine Marketing (2320102351)",
+      "present": 11,
+      "total": 32,
+      "percentage": 34.38
+    },
+    {
+      "name": "Web Development using ASP .net (C#) (2320103351)",
+      "present": 9,
+      "total": 47,
+      "percentage": 19.15
+    },
+    {
+      "name": "Python Programming (2320103352)",
+      "present": 30,
+      "total": 57,
+      "percentage": 52.63
+    },
+    {
+      "name": "Career Development Skills (2320109351)",
+      "present": 8,
+      "total": 18,
+      "percentage": 44.44
+    },
+    {
+      "name": "Data Science (2320110351)",
+      "present": 10,
+      "total": 24,
+      "percentage": 41.67
+    }
+  ],
+  "summary": {
+    "totalPresent": 41,
+    "totalLectures": 68,
+    "averagePercentage": 178,
+    "extraEntered": 38,
+    "extraPercentage": 0,
+    "extraConsidered": 0,
+    "withExtraPresent": 0,
+    "withExtraPercentage": 68
+  }
+}

@@ -1,245 +1,395 @@
 "use client";
 
-import { useEffect } from "react";
-import { useAuth } from "@/hooks/useAuth";
-import { useToast } from "@/hooks/use-toast";
-import Navbar from "@/components/navbar";
-import MobileNav from "@/components/mobile-nav";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
-import { 
-  Megaphone, 
-  Calendar, 
-  BookOpen, 
+import { useMemo, useState } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import {
   AlertCircle,
-  Clock,
-  Building,
-  GraduationCap
+  BellRing,
+  Building2,
+  CalendarDays,
+  Megaphone,
+  Plus,
+  Sparkles,
+  X,
 } from "lucide-react";
 
-export default function Announcements() {
+import { PageHeader } from "@/components/page-header";
+import { StatusPill } from "@/components/status-pill";
+import StudentShell from "@/components/student-shell";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Skeleton } from "@/components/ui/skeleton";
+import { Textarea } from "@/components/ui/textarea";
+import { useAuth } from "@/hooks/useAuth";
+import { useToast } from "@/hooks/use-toast";
+import { ApiError, apiFetch } from "@/lib/api";
+import { fetchAnnouncements, queryKeys, type Announcement } from "@/lib/server-state";
+
+interface FormState {
+  title: string;
+  content: string;
+  priority: string;
+  department: string;
+  targetProgram: string;
+  targetSemester: string;
+}
+
+interface FormErrors {
+  title?: string;
+  content?: string;
+  general?: string;
+}
+
+const initialFormState: FormState = {
+  title: "",
+  content: "",
+  priority: "normal",
+  department: "",
+  targetProgram: "",
+  targetSemester: "",
+};
+
+function formatRelative(dateString: string) {
+  const date = new Date(dateString);
+  const now = new Date();
+  const diffInHours = Math.floor((now.getTime() - date.getTime()) / (1000 * 60 * 60));
+
+  if (diffInHours < 1) {
+    return "Just now";
+  }
+  if (diffInHours < 24) {
+    return `${diffInHours}h ago`;
+  }
+  const diffInDays = Math.floor(diffInHours / 24);
+  if (diffInDays < 7) {
+    return `${diffInDays}d ago`;
+  }
+  return date.toLocaleDateString();
+}
+
+function priorityVariant(priority: string) {
+  if (priority === "high") {
+    return "coming" as const;
+  }
+  if (priority === "low") {
+    return "spotlight" as const;
+  }
+  return "progress" as const;
+}
+
+export default function AnnouncementsPage() {
+  const { user, isLoading: authLoading } = useAuth();
+  const queryClient = useQueryClient();
   const { toast } = useToast();
-  const { isAuthenticated, isLoading: authLoading } = useAuth();
+  const [showComposer, setShowComposer] = useState(false);
+  const [form, setForm] = useState<FormState>(initialFormState);
+  const [errors, setErrors] = useState<FormErrors>({});
+  const [submitting, setSubmitting] = useState(false);
 
-  // PROTOTYPE MODE - Skip authentication check
-  // TODO: Re-enable when implementing real authentication  
-  // useEffect(() => {
-  //   if (!authLoading && !isAuthenticated) {
-  //     toast({
-  //       title: "Unauthorized",
-  //       description: "You are logged out. Logging in again...",
-  //       variant: "destructive",
-  //     });
-  //     setTimeout(() => {
-  //       window.location.href = "/api/login";
-  //     }, 500);
-  //     return;
-  //   }
-  // }, [isAuthenticated, authLoading, toast]);
+  const canCreateAnnouncement = user?.role === "FACULTY" || user?.role === "ADMIN";
 
-  // PROTOTYPE MODE - Skip loading check
-  // if (authLoading || !isAuthenticated) {
-  //   return <div className="min-h-screen bg-light-bg" />;
-  // }
+  const announcementsQuery = useQuery({
+    queryKey: queryKeys.announcements,
+    queryFn: fetchAnnouncements,
+    staleTime: 60_000,
+  });
 
-  // Mock announcements data
-  const announcements = [
-    {
-      id: 1,
-      title: "Mid-term Examinations Schedule",
-      content: "Dear Students,\n\nThe mid-term examinations for the current semester will be conducted from March 15-25, 2025. Please check your individual exam schedule on the student portal and prepare accordingly.\n\nPlease bring your student ID card and necessary stationery for the examinations. Mobile phones are strictly prohibited in the examination hall.\n\nFor any queries, contact the examination department.",
-      department: "Academic Office",
-      priority: "high",
-      createdAt: "2025-03-01T10:00:00Z",
-      targetProgram: "All Programs",
-      targetSemester: null
-    },
-    {
-      id: 2,
-      title: "Holiday Notice - Holi Festival",
-      content: "The university will remain closed on March 8th, 2025 on account of Holi festival. Regular classes will resume from March 9th, 2025.\n\nWish you all a very Happy and Colorful Holi!",
-      department: "Administration",
-      priority: "normal",
-      createdAt: "2025-03-05T14:30:00Z",
-      targetProgram: null,
-      targetSemester: null
-    },
-    {
-      id: 3,
-      title: "Computer Science Department Workshop",
-      content: "A workshop on 'Artificial Intelligence and Machine Learning' will be conducted on March 20th, 2025 from 10:00 AM to 4:00 PM in the CS department.\n\nAll CS students are encouraged to participate. Registration is mandatory through the department office.",
-      department: "Computer Science",
-      priority: "normal",
-      createdAt: "2025-03-10T09:00:00Z",
-      targetProgram: "B.Tech CSE",
-      targetSemester: "6"
-    },
-    {
-      id: 4,
-      title: "Library New Book Arrivals",
-      content: "The library has received new books on various subjects including latest technology, literature, and research materials. Students are encouraged to visit the library and explore the new collection.\n\nLibrary timing: Monday to Friday 8:00 AM - 8:00 PM, Weekends 9:00 AM - 5:00 PM",
-      department: "Library",
-      priority: "low",
-      createdAt: "2025-03-12T11:15:00Z",
-      targetProgram: null,
-      targetSemester: null
-    },
-    {
-      id: 5,
-      title: "Fee Payment Deadline Extension",
-      content: "Due to technical issues with the online payment portal, the fee payment deadline has been extended to March 25th, 2025. Students who haven't paid their fees can now make payments without any late fees until the new deadline.\n\nFor assistance with fee payment, contact the accounts office.",
-      department: "Accounts Office",
-      priority: "high",
-      createdAt: "2025-03-14T16:45:00Z",
-      targetProgram: null,
-      targetSemester: null
+  const announcements = announcementsQuery.data || [];
+  const loading = announcementsQuery.isLoading;
+
+  const featuredAnnouncements = useMemo(
+    () => announcements.filter((item) => item.priority === "high").slice(0, 2),
+    [announcements],
+  );
+  const regularAnnouncements = useMemo(
+    () => announcements.filter((item) => !featuredAnnouncements.some((featured) => featured.id === item.id)),
+    [announcements, featuredAnnouncements],
+  );
+
+  const validateForm = () => {
+    const nextErrors: FormErrors = {};
+    if (!form.title.trim()) {
+      nextErrors.title = "A title is required.";
+    } else if (form.title.trim().length < 5) {
+      nextErrors.title = "Use at least 5 characters.";
     }
-  ];
-
-  const getDepartmentIcon = (department: string) => {
-    switch (department?.toLowerCase()) {
-      case 'computer science':
-        return <GraduationCap className="h-4 w-4" />;
-      case 'academic office':
-      case 'administration':
-      case 'accounts office':
-        return <Building className="h-4 w-4" />;
-      case 'library':
-        return <BookOpen className="h-4 w-4" />;
-      default:
-        return <Megaphone className="h-4 w-4" />;
+    if (!form.content.trim()) {
+      nextErrors.content = "Content is required.";
+    } else if (form.content.trim().length < 10) {
+      nextErrors.content = "Use at least 10 characters.";
     }
+    setErrors(nextErrors);
+    return Object.keys(nextErrors).length === 0;
   };
 
-  const getDepartmentColor = (department: string) => {
-    switch (department?.toLowerCase()) {
-      case 'computer science':
-        return 'border-academic-blue bg-blue-50';
-      case 'academic office':
-      case 'administration':
-        return 'border-green-500 bg-green-50';
-      case 'accounts office':
-        return 'border-yellow-500 bg-yellow-50';
-      case 'library':
-        return 'border-purple-500 bg-purple-50';
-      default:
-        return 'border-gray-500 bg-gray-50';
+  const submitAnnouncement = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!validateForm()) {
+      return;
     }
-  };
 
-  const getPriorityColor = (priority: string) => {
-    switch (priority?.toLowerCase()) {
-      case 'high':
-        return 'destructive';
-      case 'normal':
-        return 'secondary';
-      case 'low':
-        return 'outline';
-      default:
-        return 'secondary';
-    }
-  };
+    setSubmitting(true);
+    setErrors({});
 
-  const formatRelativeTime = (date: string) => {
-    const now = new Date();
-    const announcementDate = new Date(date);
-    const diffInHours = Math.floor((now.getTime() - announcementDate.getTime()) / (1000 * 60 * 60));
-    
-    if (diffInHours < 1) {
-      return 'Just now';
-    } else if (diffInHours < 24) {
-      return `${diffInHours} hour${diffInHours > 1 ? 's' : ''} ago`;
-    } else {
-      const diffInDays = Math.floor(diffInHours / 24);
-      if (diffInDays < 7) {
-        return `${diffInDays} day${diffInDays > 1 ? 's' : ''} ago`;
+    try {
+      const payload = await apiFetch<{
+        success: true;
+        announcement: Announcement;
+      }>("/api/announcements", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(form),
+      });
+
+      queryClient.setQueryData<Announcement[]>(queryKeys.announcements, (previous = []) => [
+        payload.announcement,
+        ...previous,
+      ]);
+      setForm(initialFormState);
+      setShowComposer(false);
+      toast({
+        title: "Announcement published",
+        description: "Students can now see the update in the announcements stream.",
+      });
+    } catch (error) {
+      if (error instanceof ApiError && Array.isArray(error.data?.errors)) {
+        const nextErrors: FormErrors = {};
+        (error.data.errors as Array<{ field?: string; message?: string }>).forEach((issue) => {
+          if (issue.field === "title") {
+            nextErrors.title = issue.message;
+          }
+          if (issue.field === "content") {
+            nextErrors.content = issue.message;
+          }
+        });
+        setErrors(nextErrors);
       } else {
-        return announcementDate.toLocaleDateString();
+        setErrors({ general: error instanceof ApiError ? error.message : "Network error. Please try again." });
       }
+    } finally {
+      setSubmitting(false);
     }
   };
+
+  if (authLoading) {
+    return (
+      <StudentShell>
+        <div className="space-y-6">
+          <Skeleton className="h-40 w-full" />
+          <Skeleton className="h-[520px] w-full" />
+        </div>
+      </StudentShell>
+    );
+  }
 
   return (
-    <div className="min-h-screen bg-light-bg">
-      <Navbar />
-      <MobileNav />
-      
-      <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        
-        {/* Header */}
-        <div className="mb-8">
-          <div className="flex items-center mb-4">
-            <Megaphone className="h-8 w-8 text-academic-blue mr-3" />
-            <h1 className="text-3xl font-bold text-slate-text">Announcements & Updates</h1>
-          </div>
-          <p className="text-gray-600">Stay updated with the latest news and announcements from your university</p>
-        </div>
+    <StudentShell>
+      <div className="space-y-6">
+        <PageHeader
+          eyebrow={
+            <>
+              <Sparkles className="h-3.5 w-3.5 text-academic-blue" />
+              Editorial campus updates
+            </>
+          }
+          title="Announcements that are easier to scan and trust"
+          description="MySVGU now presents updates in a cleaner editorial flow, with clearer priority, department context, and calmer reading rhythm across mobile and desktop."
+          status={<StatusPill variant="live">Updates live</StatusPill>}
+          action={
+            canCreateAnnouncement ? (
+              <Button onClick={() => setShowComposer((previous) => !previous)}>
+                {showComposer ? <X className="h-4 w-4" /> : <Plus className="h-4 w-4" />}
+                {showComposer ? "Close composer" : "New announcement"}
+              </Button>
+            ) : undefined
+          }
+        />
 
-        <div className="space-y-6">
-          {announcements.map((announcement: any) => (
-            <Card 
-              key={announcement.id} 
-              className={`border-l-4 ${getDepartmentColor(announcement.department)} transition-shadow hover:shadow-md`}
-            >
-              <CardHeader>
-                <div className="flex items-start justify-between">
-                  <div className="flex-1">
-                    <div className="flex items-center space-x-2 mb-2">
-                      {getDepartmentIcon(announcement.department)}
-                      <span className="text-sm font-medium text-gray-600">
-                        {announcement.department || 'General'}
-                      </span>
-                      <Badge variant={getPriorityColor(announcement.priority)}>
-                        {announcement.priority?.toUpperCase() || 'NORMAL'}
-                      </Badge>
+        {showComposer && canCreateAnnouncement ? (
+          <Card className="border-blue-200 bg-white/92">
+            <CardHeader className="border-b border-slate-100 pb-5">
+              <CardTitle className="text-2xl text-slate-950">Publish a new announcement</CardTitle>
+            </CardHeader>
+            <CardContent className="pt-6">
+              <form onSubmit={submitAnnouncement} className="space-y-5">
+                {errors.general ? (
+                  <div className="rounded-[1.25rem] border border-red-200 bg-red-50 p-4 text-sm text-red-700">{errors.general}</div>
+                ) : null}
+                <div className="space-y-2">
+                  <label htmlFor="announcement-title" className="text-sm font-semibold text-slate-900">Title</label>
+                  <input
+                    id="announcement-title"
+                    value={form.title}
+                    onChange={(event) => setForm((previous) => ({ ...previous, title: event.target.value }))}
+                    className="h-12 w-full rounded-[1.15rem] border border-slate-200 bg-slate-50 px-4 text-sm text-slate-800 outline-none transition focus:border-academic-blue focus:bg-white"
+                    placeholder="e.g. Mid-sem practical submission window is now open"
+                  />
+                  {errors.title ? <p className="text-sm text-red-600">{errors.title}</p> : null}
+                </div>
+                <div className="space-y-2">
+                  <label htmlFor="announcement-content" className="text-sm font-semibold text-slate-900">Content</label>
+                  <Textarea
+                    id="announcement-content"
+                    value={form.content}
+                    onChange={(event) => setForm((previous) => ({ ...previous, content: event.target.value }))}
+                    rows={6}
+                    className="rounded-[1.25rem] border border-slate-200 bg-slate-50 px-4 py-3 text-sm leading-7 text-slate-800 outline-none transition focus:border-academic-blue focus:bg-white"
+                    placeholder="Share the update, important dates, and what students should do next."
+                  />
+                  {errors.content ? <p className="text-sm text-red-600">{errors.content}</p> : null}
+                </div>
+                <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+                  <div className="space-y-2">
+                    <label className="text-sm font-semibold text-slate-900">Priority</label>
+                    <select
+                      value={form.priority}
+                      onChange={(event) => setForm((previous) => ({ ...previous, priority: event.target.value }))}
+                      className="h-12 w-full rounded-[1.15rem] border border-slate-200 bg-slate-50 px-4 text-sm text-slate-800 outline-none transition focus:border-academic-blue focus:bg-white"
+                    >
+                      <option value="low">Low</option>
+                      <option value="normal">Normal</option>
+                      <option value="high">High</option>
+                    </select>
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-sm font-semibold text-slate-900">Department</label>
+                    <input
+                      value={form.department}
+                      onChange={(event) => setForm((previous) => ({ ...previous, department: event.target.value }))}
+                      className="h-12 w-full rounded-[1.15rem] border border-slate-200 bg-slate-50 px-4 text-sm text-slate-800 outline-none transition focus:border-academic-blue focus:bg-white"
+                      placeholder="Academic Office"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-sm font-semibold text-slate-900">Program</label>
+                    <input
+                      value={form.targetProgram}
+                      onChange={(event) => setForm((previous) => ({ ...previous, targetProgram: event.target.value }))}
+                      className="h-12 w-full rounded-[1.15rem] border border-slate-200 bg-slate-50 px-4 text-sm text-slate-800 outline-none transition focus:border-academic-blue focus:bg-white"
+                      placeholder="BCA"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-sm font-semibold text-slate-900">Semester</label>
+                    <input
+                      value={form.targetSemester}
+                      onChange={(event) => setForm((previous) => ({ ...previous, targetSemester: event.target.value }))}
+                      className="h-12 w-full rounded-[1.15rem] border border-slate-200 bg-slate-50 px-4 text-sm text-slate-800 outline-none transition focus:border-academic-blue focus:bg-white"
+                      placeholder="4"
+                    />
+                  </div>
+                </div>
+                <div className="flex justify-end">
+                  <Button type="submit" disabled={submitting}>
+                    <Megaphone className="h-4 w-4" />
+                    {submitting ? "Publishing..." : "Publish announcement"}
+                  </Button>
+                </div>
+              </form>
+            </CardContent>
+          </Card>
+        ) : null}
+
+        {loading ? (
+          <div className="space-y-4">
+            <Skeleton className="h-48 w-full" />
+            <Skeleton className="h-48 w-full" />
+          </div>
+        ) : announcements.length === 0 ? (
+          <Card className="border-white/85 bg-white/90">
+            <CardContent className="p-10 text-center">
+              <BellRing className="mx-auto mb-4 h-12 w-12 text-slate-300" />
+              <h2 className="font-display text-2xl font-semibold text-slate-950">No updates yet</h2>
+              <p className="mt-3 text-sm leading-7 text-slate-500">Announcements will appear here once faculty or admin publish them.</p>
+            </CardContent>
+          </Card>
+        ) : (
+          <div className="grid gap-6 xl:grid-cols-[1.05fr_0.95fr]">
+            <div className="space-y-6">
+              {featuredAnnouncements.length > 0 ? (
+                <Card className="border-white/85 bg-gradient-to-br from-slate-950 via-deep-blue to-academic-blue text-white">
+                  <CardHeader className="pb-2">
+                    <div className="flex items-center gap-2">
+                      <AlertCircle className="h-5 w-5 text-white" />
+                      <CardTitle className="text-2xl text-white">Priority updates</CardTitle>
                     </div>
-                    <CardTitle className="text-xl text-slate-text leading-tight">
-                      {announcement.title}
-                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-4 pt-2">
+                    {featuredAnnouncements.map((announcement) => (
+                      <div key={announcement.id} className="rounded-[1.35rem] border border-white/15 bg-white/10 p-5">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <StatusPill variant="spotlight" className="border-white/20 bg-white/10 text-white">{announcement.department || "General"}</StatusPill>
+                          <StatusPill variant="spotlight" className="border-white/20 bg-white/10 text-white">High priority</StatusPill>
+                        </div>
+                        <h2 className="mt-4 font-display text-2xl font-semibold text-white">{announcement.title}</h2>
+                        <p className="mt-3 whitespace-pre-wrap text-sm leading-7 text-blue-100">{announcement.content}</p>
+                        <div className="mt-4 flex flex-wrap gap-4 text-sm text-blue-100">
+                          <span>{formatRelative(announcement.createdAt)}</span>
+                          {announcement.postedBy ? <span>{announcement.postedBy.name}</span> : null}
+                          {announcement.targetProgram ? <span>{announcement.targetProgram}</span> : null}
+                          {announcement.targetSemester ? <span>Semester {announcement.targetSemester}</span> : null}
+                        </div>
+                      </div>
+                    ))}
+                  </CardContent>
+                </Card>
+              ) : null}
+
+              <Card className="border-white/85 bg-white/90">
+                <CardHeader className="border-b border-slate-100 pb-5">
+                  <div className="flex items-center gap-2">
+                    <CalendarDays className="h-5 w-5 text-academic-blue" />
+                    <CardTitle className="text-2xl text-slate-950">Latest updates</CardTitle>
                   </div>
-                </div>
-                
-                <div className="flex items-center text-sm text-gray-500 space-x-4">
-                  <div className="flex items-center">
-                    <Clock className="h-4 w-4 mr-1" />
-                    {formatRelativeTime(announcement.createdAt)}
+                </CardHeader>
+                <CardContent className="space-y-4 pt-6">
+                  {regularAnnouncements.map((announcement) => (
+                    <article key={announcement.id} className="rounded-[1.35rem] border border-slate-100 bg-slate-50/80 p-5">
+                      <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+                        <div>
+                          <div className="flex flex-wrap gap-2">
+                            <StatusPill variant={priorityVariant(announcement.priority)}>{announcement.priority || "normal"}</StatusPill>
+                            <StatusPill variant="spotlight">{announcement.department || "General"}</StatusPill>
+                          </div>
+                          <h3 className="mt-4 font-display text-2xl font-semibold text-slate-950">{announcement.title}</h3>
+                        </div>
+                        <p className="text-sm text-slate-500">{formatRelative(announcement.createdAt)}</p>
+                      </div>
+                      <p className="mt-4 whitespace-pre-wrap text-sm leading-7 text-slate-600">{announcement.content}</p>
+                      <div className="mt-4 flex flex-wrap gap-3 text-sm text-slate-500">
+                        {announcement.postedBy ? <span>Posted by {announcement.postedBy.name}</span> : null}
+                        {announcement.targetProgram ? <span>{announcement.targetProgram}</span> : null}
+                        {announcement.targetSemester ? <span>Semester {announcement.targetSemester}</span> : null}
+                      </div>
+                    </article>
+                  ))}
+                </CardContent>
+              </Card>
+            </div>
+
+            <div className="space-y-6">
+              <Card className="border-white/85 bg-white/90">
+                <CardHeader className="border-b border-slate-100 pb-5">
+                  <div className="flex items-center gap-2">
+                    <Building2 className="h-5 w-5 text-academic-blue" />
+                    <CardTitle className="text-2xl text-slate-950">Why this view feels better</CardTitle>
                   </div>
-                  <div className="flex items-center">
-                    <Calendar className="h-4 w-4 mr-1" />
-                    {new Date(announcement.createdAt).toLocaleDateString()}
+                </CardHeader>
+                <CardContent className="space-y-4 pt-6 text-sm leading-7 text-slate-600">
+                  <div className="rounded-[1.25rem] bg-slate-50 p-4">
+                    <p className="font-semibold text-slate-900">Priority is obvious without feeling noisy</p>
+                    <p className="mt-2">Important updates get spotlight treatment while routine notices stay easy to scan in the list below.</p>
                   </div>
-                </div>
-              </CardHeader>
-              
-              <CardContent>
-                <div className="prose prose-sm max-w-none">
-                  <p className="text-gray-700 leading-relaxed whitespace-pre-wrap">
-                    {announcement.content}
-                  </p>
-                </div>
-                
-                {(announcement.targetProgram || announcement.targetSemester) && (
-                  <div className="mt-4 pt-4 border-t border-gray-200">
-                    <div className="flex items-center text-sm text-gray-500">
-                      <span className="font-medium mr-2">Target:</span>
-                      {announcement.targetProgram && (
-                        <Badge variant="outline" className="mr-2">
-                          {announcement.targetProgram}
-                        </Badge>
-                      )}
-                      {announcement.targetSemester && (
-                        <Badge variant="outline">
-                          Semester {announcement.targetSemester}
-                        </Badge>
-                      )}
-                    </div>
+                  <div className="rounded-[1.25rem] bg-slate-50 p-4">
+                    <p className="font-semibold text-slate-900">Department context travels with the post</p>
+                    <p className="mt-2">Students can tell quickly whether an update came from academics, accounts, or another university office.</p>
                   </div>
-                )}
-              </CardContent>
-            </Card>
-          ))}
-        </div>
+                </CardContent>
+              </Card>
+            </div>
+          </div>
+        )}
       </div>
-    </div>
+    </StudentShell>
   );
 }

@@ -1,0 +1,188 @@
+// Prisma schema for MySVGU
+// Database: PostgreSQL
+
+generator client {
+  provider = "prisma-client-js"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id                String         @id @default(cuid())
+  classId           String         @map("institute_id")
+  studentId         String         @unique @map("application_id")
+  localPasswordHash String         @map("password")
+  name              String
+  role              Role           @default(STUDENT)
+  createdAt         DateTime       @default(now()) @map("created_at")
+  updatedAt         DateTime       @updatedAt @map("updated_at")
+
+  erpCredential      ErpCredential?
+  profile            Profile?
+  attendanceSnapshot AttendanceSnapshot?
+  announcements      Announcement[]
+  questions          Question[]
+  answers            Answer[]
+  questionVotes      QuestionVote[]
+  answerVotes        AnswerVote[]
+  comments           Comment[]
+
+  @@unique([classId, studentId])
+  @@map("users")
+}
+
+enum Role {
+  STUDENT
+  FACULTY
+  ADMIN
+}
+
+model Profile {
+  id           String  @id @default(cuid())
+  userId       String  @unique @map("user_id")
+  enrollmentNo String? @map("enrollment_no")
+  classId      String? @map("class_id")
+  semester     String?
+  course       String?
+  avatarUrl    String? @map("avatar_url")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("profiles")
+}
+
+model ErpCredential {
+  id                 String    @id @default(cuid())
+  userId             String    @unique @map("user_id")
+  passwordCiphertext String    @map("password_ciphertext")
+  lastVerifiedAt     DateTime? @map("last_verified_at")
+  lastError          String?   @map("last_error")
+  createdAt          DateTime  @default(now()) @map("created_at")
+  updatedAt          DateTime  @updatedAt @map("updated_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("erp_credentials")
+}
+
+model AttendanceSnapshot {
+  id            String   @id @default(cuid())
+  userId        String   @unique @map("user_id")
+  attendancePct Float    @map("attendance_pct")
+  attended      Int
+  total         Int
+  subjectsJson  String   @map("subjects_json")
+  studentName   String?  @map("student_name")
+  lastSyncedAt  DateTime @map("last_synced_at")
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("attendance_snapshots")
+}
+
+model Announcement {
+  id             String   @id @default(cuid())
+  title          String
+  content        String
+  priority       String   @default("normal")
+  department     String?
+  targetProgram  String?  @map("target_program")
+  targetSemester String?  @map("target_semester")
+  createdAt      DateTime @default(now()) @map("created_at")
+  postedById     String   @map("posted_by")
+
+  postedBy User @relation(fields: [postedById], references: [id], onDelete: Cascade)
+
+  @@map("announcements")
+}
+
+model Question {
+  id        String         @id @default(cuid())
+  title     String
+  body      String
+  tags      String[]       @default([])
+  category  String         @default("Academic")
+  upvotes   Int            @default(0)
+  downvotes Int            @default(0)
+  views     Int            @default(0)
+  createdAt DateTime       @default(now()) @map("created_at")
+  askedById String         @map("asked_by")
+
+  askedBy User           @relation(fields: [askedById], references: [id], onDelete: Cascade)
+  answers Answer[]
+  votes   QuestionVote[]
+
+  @@map("questions")
+}
+
+model Answer {
+  id           String       @id @default(cuid())
+  content      String
+  upvotes      Int          @default(0)
+  downvotes    Int          @default(0)
+  createdAt    DateTime     @default(now()) @map("created_at")
+  questionId   String       @map("question_id")
+  answeredById String       @map("answered_by")
+
+  question   Question     @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  answeredBy User         @relation(fields: [answeredById], references: [id], onDelete: Cascade)
+  votes      AnswerVote[]
+  comments   Comment[]
+
+  @@map("answers")
+}
+
+enum VoteDirection {
+  UP
+  DOWN
+}
+
+model QuestionVote {
+  id         String        @id @default(cuid())
+  questionId String        @map("question_id")
+  userId     String        @map("user_id")
+  direction  VoteDirection
+  createdAt  DateTime      @default(now()) @map("created_at")
+  updatedAt  DateTime      @updatedAt @map("updated_at")
+
+  question Question @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([questionId, userId])
+  @@map("question_votes")
+}
+
+model AnswerVote {
+  id        String        @id @default(cuid())
+  answerId  String        @map("answer_id")
+  userId    String        @map("user_id")
+  direction VoteDirection
+  createdAt DateTime      @default(now()) @map("created_at")
+  updatedAt DateTime      @updatedAt @map("updated_at")
+
+  answer Answer @relation(fields: [answerId], references: [id], onDelete: Cascade)
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([answerId, userId])
+  @@map("answer_votes")
+}
+
+model Comment {
+  id           String   @id @default(cuid())
+  content      String
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+  answerId     String   @map("answer_id")
+  authoredById String   @map("authored_by")
+
+  answer     Answer @relation(fields: [answerId], references: [id], onDelete: Cascade)
+  authoredBy User   @relation(fields: [authoredById], references: [id], onDelete: Cascade)
+
+  @@map("comments")
+}

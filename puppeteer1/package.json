@@ -1,0 +1,13 @@
+{
+  "name": "my-svgu-erp-worker",
+  "version": "1.0.0",
+  "type": "module",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "test:parser": "node test-parser.js"
+  },
+  "dependencies": {
+    "puppeteer": "^24.19.0"
+  }
+}

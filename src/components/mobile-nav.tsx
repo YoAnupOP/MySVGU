@@ -2,62 +2,34 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Button } from "@/components/ui/button";
-import { 
-  LayoutDashboard, 
-  Calendar, 
-  Bot, 
-  Bell 
-} from "lucide-react";
+
+import { studentNavigation, isStudentNavigationActive } from "@/lib/student-navigation";
+import { cn } from "@/lib/utils";
 
 export default function MobileNav() {
   const pathname = usePathname();
 
-  const navigationItems = [
-    { 
-      path: "/dashboard", 
-      label: "Dashboard", 
-      icon: LayoutDashboard,
-      isActive: pathname === "/" || pathname === "/dashboard"
-    },
-    { 
-      path: "/timetable", 
-      label: "Schedule", 
-      icon: Calendar,
-      isActive: pathname === "/timetable"
-    },
-    { 
-      path: "/chatbot", 
-      label: "AI Chat", 
-      icon: Bot,
-      isActive: pathname === "/chatbot"
-    },
-    { 
-      path: "/announcements", 
-      label: "Updates", 
-      icon: Bell,
-      isActive: pathname === "/announcements"
-    },
-  ];
-
   return (
-    <div className="md:hidden fixed bottom-0 left-0 right-0 bg-card-white border-t border-gray-200 z-40">
-      <div className="grid grid-cols-4 gap-1 p-2">
-        {navigationItems.map((item) => (
-          <Link key={item.path} href={item.path}>
-            <Button
-              variant="ghost"
-              className={`flex flex-col items-center py-2 px-1 h-auto space-y-1 w-full ${
-                item.isActive 
-                  ? "text-academic-blue bg-blue-50" 
-                  : "text-gray-500 hover:text-academic-blue hover:bg-gray-50"
-              }`}
-            >
-              <item.icon className="h-5 w-5" />
-              <span className="text-xs font-medium">{item.label}</span>
-            </Button>
-          </Link>
-        ))}
+    <div className="theme-mobile-nav fixed inset-x-0 bottom-0 z-40 border-t px-3 pb-[calc(env(safe-area-inset-bottom)+0.5rem)] pt-2 backdrop-blur-xl lg:hidden">
+      <div className="theme-mobile-nav-inner mx-auto grid max-w-xl grid-cols-5 gap-1 rounded-[1.75rem] border p-1.5 shadow-[0_18px_45px_rgba(15,42,94,0.16)]">
+        {studentNavigation.map((item) => {
+          const isActive = isStudentNavigationActive(pathname, item.path);
+          return (
+            <Link key={item.path} href={item.path} className="group">
+              <div
+                className={cn(
+                  "flex flex-col items-center justify-center rounded-[1.2rem] px-1 py-2 text-[11px] font-semibold transition-all duration-200",
+                  isActive
+                    ? "bg-academic-blue text-white shadow-[0_15px_30px_rgba(49,107,255,0.25)]"
+                    : "text-slate-500 group-hover:bg-white group-hover:text-academic-blue",
+                )}
+              >
+                <item.icon className="mb-1 h-[18px] w-[18px]" />
+                <span className="truncate">{item.mobileLabel}</span>
+              </div>
+            </Link>
+          );
+        })}
       </div>
     </div>
   );

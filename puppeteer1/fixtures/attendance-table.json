@@ -1,0 +1,25 @@
+{
+  "student": {
+    "studentId": "23CI2010277",
+    "name": "MAHIDA DHANRAJSINH DIGPALSINH"
+  },
+  "overall": {
+    "present": 21,
+    "total": 47,
+    "percentage": 44.68
+  },
+  "subjects": [
+    {
+      "name": "Search Engine Marketing (2320102351)",
+      "present": 11,
+      "total": 18,
+      "percentage": 61.11
+    },
+    {
+      "name": "Python Programming (2320103352)",
+      "present": 10,
+      "total": 29,
+      "percentage": 34.48
+    }
+  ]
+}

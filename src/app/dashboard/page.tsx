@@ -1,344 +1,530 @@
 "use client";
 
-import { useEffect } from "react";
-import { useAuth } from "@/hooks/useAuth";
-import { useToast } from "@/hooks/use-toast";
-import Navbar from "@/components/navbar";
-import MobileNav from "@/components/mobile-nav";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
-import { Progress } from "@/components/ui/progress";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { Skeleton } from "@/components/ui/skeleton";
-import { 
-  CalendarCheck, 
-  TrendingUp, 
-  DollarSign, 
+import Link from "next/link";
+import { useMemo } from "react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import {
+  AlertCircle,
+  ArrowUpRight,
   BookOpen,
-  Clock,
-  MapPin,
-  Award,
-  Calendar
+  CalendarCheck,
+  Clock3,
+  RefreshCw,
+  Sparkles,
+  TrendingUp,
+  WalletCards,
 } from "lucide-react";
 
+import { CommunityBadges } from "@/components/community-badges";
+import { PageHeader } from "@/components/page-header";
+import { StatusPill } from "@/components/status-pill";
+import StudentShell from "@/components/student-shell";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Progress } from "@/components/ui/progress";
+import { Skeleton } from "@/components/ui/skeleton";
+import { useAuth } from "@/hooks/useAuth";
+import { ApiError } from "@/lib/api";
+import {
+  fetchAnnouncements,
+  fetchCommunitySummary,
+  fetchDashboardAttendance,
+  refreshDashboardAttendance,
+  queryKeys,
+} from "@/lib/server-state";
+
+const buddyPrompts = [
+  "What should I focus on this week?",
+  "Summarize important announcements for me",
+  "How can I improve my attendance quickly?",
+];
+
+const formatDate = (value: string | Date) => {
+  const date = new Date(value);
+  return date.toLocaleString("en-US", {
+    year: "numeric",
+    month: "short",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+};
+
 export default function Dashboard() {
-  const { toast } = useToast();
-  const { user, isAuthenticated, isLoading: authLoading } = useAuth();
+  const { user, isLoading: authLoading } = useAuth();
+  const queryClient = useQueryClient();
 
-  // PROTOTYPE MODE - Skip authentication check
-  // TODO: Re-enable this when implementing real authentication
-  // useEffect(() => {
-  //   if (!authLoading && !isAuthenticated) {
-  //     toast({
-  //       title: "Unauthorized", 
-  //       description: "You are logged out. Logging in again...",
-  //       variant: "destructive",
-  //     });
-  //     setTimeout(() => {
-  //       window.location.href = "/api/login";
-  //     }, 500);
-  //     return;
-  //   }
-  // }, [isAuthenticated, authLoading, toast]);
+  const announcementsQuery = useQuery({
+    queryKey: queryKeys.announcements,
+    queryFn: fetchAnnouncements,
+    staleTime: 60_000,
+  });
 
-  // PROTOTYPE MODE - Skip loading check
-  // if (authLoading || !isAuthenticated) {
-  //   return <div className="min-h-screen bg-light-bg" />;
-  // }
+  const communityQuery = useQuery({
+    queryKey: queryKeys.communityMeSummary,
+    queryFn: fetchCommunitySummary,
+    enabled: Boolean(user),
+    staleTime: 60_000,
+  });
 
-  const userName = user?.firstName ? `${user.firstName} ${user.lastName || ''}`.trim() : 'Student';
+  const attendanceQuery = useQuery({
+    queryKey: queryKeys.dashboardAttendance(user?.studentId),
+    queryFn: fetchDashboardAttendance,
+    enabled: !authLoading && user?.role === "STUDENT",
+    staleTime: 5 * 60_000,
+    gcTime: 30 * 60_000,
+    retry: 1,
+  });
 
-  // Mock data for development
-  const student = {
-    attendance: "85",
-    cgpa: "8.5",
-    feesStatus: "paid",
-    feesDueDate: "2025-07-15"
-  };
-
-  const timetable = [
-    {
-      dayOfWeek: 1,
-      subject: "Mathematics",
-      startTime: "09:00",
-      endTime: "10:30",
-      room: "A101",
-      faculty: "Dr. Smith"
+  const refreshMutation = useMutation({
+    mutationFn: refreshDashboardAttendance,
+    onSuccess: (data) => {
+      queryClient.setQueryData(
+        queryKeys.dashboardAttendance(user?.studentId),
+        data,
+      );
     },
-    {
-      dayOfWeek: 1, 
-      subject: "Physics",
-      startTime: "11:00",
-      endTime: "12:30",
-      room: "B202",
-      faculty: "Prof. Johnson"
-    }
-  ];
+  });
 
-  const results = [
-    {
-      subject: "Mathematics",
-      marks: 85,
-      maxMarks: 100,
-      grade: "A"
-    },
-    {
-      subject: "Physics", 
-      marks: 78,
-      maxMarks: 100,
-      grade: "B+"
-    }
-  ];
+  const announcements = announcementsQuery.data || [];
+  const communityProfile = communityQuery.data || null;
+  const attendance = attendanceQuery.data || null;
+  const attendanceError =
+    attendanceQuery.error instanceof ApiError ? attendanceQuery.error.message : null;
+  const loadingAnnouncements = announcementsQuery.isLoading;
+  const loadingCommunity = communityQuery.isLoading;
+  const loadingAttendance = attendanceQuery.isLoading;
+  const refreshingAttendance = refreshMutation.isPending;
 
-  const announcements = [
-    {
-      title: "Mid-term Examinations",
-      description: "Mid-term exams will be conducted from March 15-25, 2025",
-      date: "2025-03-01",
-      subject: "General"
-    },
-    {
-      title: "Holiday Notice",
-      description: "University will remain closed on March 8th for Holi",
-      date: "2025-03-05", 
-      subject: "Administration"
-    }
-  ];
+  const userName = user?.name || "Student";
+  const userRole = user?.role || "STUDENT";
+  const attendancePercentage = attendance?.overall.percentage || 0;
+  const showStudentAttendance = userRole === "STUDENT";
+  const userInitials = userName
+    .split(" ")
+    .map((namePart) => namePart[0])
+    .join("")
+    .slice(0, 2)
+    .toUpperCase();
 
-  // Group timetable by day
-  const groupedTimetable = timetable?.reduce((acc: any, entry: any) => {
-    const dayNames = ['', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
-    const dayName = dayNames[entry.dayOfWeek];
-    if (!acc[dayName]) acc[dayName] = [];
-    acc[dayName].push(entry);
-    return acc;
-  }, {}) || {};
+  const cards = useMemo(
+    () => [
+      {
+        key: "attendance",
+        title: "Attendance",
+        description: attendance
+          ? `${attendance.overall.present}/${attendance.overall.total} classes attended`
+          : "Live from official ERP",
+        icon: CalendarCheck,
+        status: showStudentAttendance ? "live" : "progress",
+      },
+      {
+        key: "cgpa",
+        title: "CGPA",
+        description: "ERP connection is in progress",
+        icon: TrendingUp,
+        status: "progress",
+      },
+      {
+        key: "fees",
+        title: "Fees / Results",
+        description: "Keeping equal space while data sync is being connected",
+        icon: WalletCards,
+        status: "coming",
+      },
+    ],
+    [attendance, showStudentAttendance],
+  );
 
-  const weekDays = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'];
+  if (authLoading) {
+    return (
+      <StudentShell>
+        <div className="space-y-6">
+          <Skeleton className="h-48 w-full" />
+          <div className="grid gap-6 lg:grid-cols-3">
+            <Skeleton className="h-40" />
+            <Skeleton className="h-40" />
+            <Skeleton className="h-40" />
+          </div>
+        </div>
+      </StudentShell>
+    );
+  }
 
   return (
-    <div className="min-h-screen bg-light-bg">
-      <Navbar />
-      <MobileNav />
-      
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-          
-          {/* Main Dashboard Content */}
-          <div className="lg:col-span-2 space-y-8">
-            
-            {/* Welcome Header */}
-            <div className="bg-gradient-to-r from-academic-blue to-deep-blue rounded-lg p-6 text-academic-blue">
-              <h1 className="text-3xl font-bold mb-2">Welcome back, {userName}!</h1>
-              <p className="text-blue-900">Ready to continue your academic journey? Check your latest updates below.</p>
-            </div>
+    <StudentShell>
+      <div className="space-y-6">
+        <PageHeader
+          eyebrow={
+            <>
+              <Sparkles className="h-3.5 w-3.5 text-academic-blue" />
+              ERP-backed campus workspace
+            </>
+          }
+          title={`Welcome back, ${userName}`}
+          description={
+            showStudentAttendance
+              ? "Your attendance sync is now live from the official ERP, while MySVGU keeps the rest of student life smoother, smarter, and much easier to scan."
+              : `Logged in as ${userRole}. Student-facing polish is now centered around the dashboard, AskSVGU, and SVGU AI.`
+          }
+          status={
+            <StatusPill variant={showStudentAttendance ? "live" : "progress"}>
+              {showStudentAttendance ? "Live sync" : "Local mode"}
+            </StatusPill>
+          }
+          action={
+            showStudentAttendance ? (
+              <Button
+                variant="outline"
+                onClick={() => {
+                  refreshMutation.mutate();
+                }}
+                disabled={refreshingAttendance || loadingAttendance}
+              >
+                <RefreshCw
+                  className={`h-4 w-4 ${refreshingAttendance ? "animate-spin" : ""}`}
+                />
+                Refresh attendance
+              </Button>
+            ) : null
+          }
+        />
 
-            {/* Quick Stats */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-              <Card className="border border-gray-200">
-                <CardContent className="p-6">
-                  <div className="flex items-center">
-                    <div className="flex-shrink-0">
-                      <CalendarCheck className="h-8 w-8 text-success-green" />
+        <div className="grid gap-6 xl:grid-cols-[1.3fr_0.7fr]">
+          <div className="space-y-6">
+            <div className="grid gap-6 md:grid-cols-3">
+              {cards.map((card) => (
+                <Card key={card.key} className="page-fade-in border-white/85 bg-white/88">
+                  <CardContent className="space-y-4 p-6">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-slate-50 text-academic-blue">
+                        <card.icon className="h-5 w-5" />
+                      </div>
+                      <StatusPill variant={card.status as "live" | "progress" | "coming"}>
+                        {card.status === "live"
+                          ? "Live"
+                          : card.status === "progress"
+                            ? "In progress"
+                            : "Coming next"}
+                      </StatusPill>
                     </div>
-                    <div className="ml-4">
-                      <p className="text-sm font-medium text-gray-500">Attendance</p>
-                      <p className="text-2xl font-bold text-slate-text">
-                        {student?.attendance ? `${student.attendance}%` : 'N/A'}
+
+                    <div className="space-y-2">
+                      <p className="text-sm font-semibold uppercase tracking-[0.18em] text-slate-500">
+                        {card.title}
                       </p>
-                    </div>
-                  </div>
-                  {student?.attendance && (
-                    <div className="mt-4">
-                      <Progress 
-                        value={parseFloat(student.attendance)} 
-                        className="h-2"
-                      />
-                    </div>
-                  )}
-                </CardContent>
-              </Card>
-
-              <Card className="border border-gray-200">
-                <CardContent className="p-6">
-                  <div className="flex items-center">
-                    <div className="flex-shrink-0">
-                      <TrendingUp className="h-8 w-8 text-academic-blue" />
-                    </div>
-                    <div className="ml-4">
-                      <p className="text-sm font-medium text-gray-500">CGPA</p>
-                      <p className="text-2xl font-bold text-slate-text">
-                        {student?.cgpa || 'N/A'}
-                      </p>
-                    </div>
-                  </div>
-                  {student?.cgpa && (
-                    <p className="text-sm text-success-green mt-2">
-                      Academic performance
-                    </p>
-                  )}
-                </CardContent>
-              </Card>
-
-              <Card className="border border-gray-200">
-                <CardContent className="p-6">
-                  <div className="flex items-center">
-                    <div className="flex-shrink-0">
-                      <DollarSign className="h-8 w-8 text-yellow-500" />
-                    </div>
-                    <div className="ml-4">
-                      <p className="text-sm font-medium text-gray-500">Fees Status</p>
-                      <Badge 
-                        variant={student?.feesStatus === 'paid' ? 'default' : 'destructive'}
-                        className={student?.feesStatus === 'paid' ? 'bg-success-green hover:bg-success-green' : ''}
-                      >
-                        {student?.feesStatus || 'N/A'}
-                      </Badge>
-                    </div>
-                  </div>
-                  {student?.feesDueDate && (
-                    <p className="text-sm text-gray-500 mt-2">
-                      Next due: {new Date(student.feesDueDate).toLocaleDateString()}
-                    </p>
-                  )}
-                </CardContent>
-              </Card>
-            </div>
-
-            {/* Timetable Section */}
-            <Card className="border border-gray-200">
-              <CardHeader className="border-b border-gray-200">
-                <CardTitle className="text-lg font-semibold text-slate-text">
-                  This Week's Schedule
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="p-6">
-                <div className="space-y-4">
-                  {weekDays.map((day) => (
-                    <div key={day} className="border border-gray-100 rounded-lg p-4">
-                      <h4 className="font-medium text-slate-text mb-3">{day}</h4>
-                      {groupedTimetable[day] && groupedTimetable[day].length > 0 ? (
-                        <div className="space-y-2">
-                          {groupedTimetable[day].map((entry: any, index: number) => (
-                            <div key={index} className="flex items-center justify-between p-3 bg-gray-50 rounded-md">
-                              <div className="flex items-center">
-                                <Clock className="h-4 w-4 text-gray-500 mr-2" />
-                                <span className="text-sm font-medium">{entry.startTime} - {entry.endTime}</span>
-                              </div>
-                              <div className="text-center">
-                                <p className="text-sm font-medium text-slate-text">{entry.subject}</p>
-                                <p className="text-xs text-gray-500">{entry.faculty}</p>
-                              </div>
-                              <div className="flex items-center text-gray-500">
-                                <MapPin className="h-4 w-4 mr-1" />
-                                <span className="text-sm">{entry.room}</span>
-                              </div>
-                            </div>
-                          ))}
-                        </div>
+                      {card.key === "attendance" ? (
+                        loadingAttendance ? (
+                          <Skeleton className="h-10 w-24" />
+                        ) : attendance ? (
+                          <div>
+                            <p className="font-display text-4xl font-semibold text-slate-950">
+                              {attendancePercentage}%
+                            </p>
+                            <p className="mt-1 text-sm text-slate-500">{card.description}</p>
+                          </div>
+                        ) : (
+                          <div>
+                            <p className="font-display text-2xl font-semibold text-slate-900">
+                              Unavailable
+                            </p>
+                            <p className="mt-1 text-sm text-slate-500">{card.description}</p>
+                          </div>
+                        )
                       ) : (
-                        <p className="text-gray-500 text-sm italic">No classes scheduled</p>
+                        <div>
+                          <p className="font-display text-2xl font-semibold text-slate-900">
+                            {card.key === "cgpa" ? "Not connected yet" : "Coming next"}
+                          </p>
+                          <p className="mt-1 text-sm leading-6 text-slate-500">
+                            {card.description}
+                          </p>
+                        </div>
                       )}
                     </div>
-                  ))}
+
+                    {card.key === "attendance" && attendance ? (
+                      <div className="space-y-2">
+                        <Progress value={attendancePercentage} />
+                        <p className="text-xs uppercase tracking-[0.18em] text-slate-500">
+                          Official ERP source
+                        </p>
+                      </div>
+                    ) : null}
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+
+            {attendanceError ? (
+              <Card className="border-red-200 bg-red-50/90">
+                <CardContent className="flex items-start gap-3 p-5 text-sm text-red-700">
+                  <AlertCircle className="mt-0.5 h-4 w-4 flex-shrink-0" />
+                  <div>
+                    <p className="font-semibold">Attendance sync is temporarily unavailable.</p>
+                    <p className="mt-1">{attendanceError}</p>
+                  </div>
+                </CardContent>
+              </Card>
+            ) : null}
+
+            <div className="grid gap-6 lg:grid-cols-[1.05fr_0.95fr]">
+              <Card className="border-white/85 bg-white/90">
+                <CardHeader className="pb-4">
+                  <div className="flex items-center justify-between gap-3">
+                    <div>
+                      <StatusPill variant="spotlight">AskSVGU momentum</StatusPill>
+                      <CardTitle className="mt-3 text-2xl text-slate-950">
+                        Community energy that keeps MySVGU sticky
+                      </CardTitle>
+                    </div>
+                    <Button asChild variant="outline" className="hidden sm:inline-flex">
+                      <Link href="/asksvgu">
+                        Open AskSVGU
+                        <ArrowUpRight className="h-4 w-4" />
+                      </Link>
+                    </Button>
+                  </div>
+                </CardHeader>
+                <CardContent className="space-y-5">
+                  {loadingCommunity ? (
+                    <>
+                      <Skeleton className="h-16 w-full" />
+                      <Skeleton className="h-12 w-3/4" />
+                    </>
+                  ) : communityProfile ? (
+                    <>
+                      <div className="grid gap-4 sm:grid-cols-3">
+                        <div className="rounded-[1.35rem] bg-slate-50 p-4">
+                          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
+                            Reputation
+                          </p>
+                          <p className="mt-2 font-display text-3xl font-semibold text-slate-950">
+                            {communityProfile.reputation}
+                          </p>
+                        </div>
+                        <div className="rounded-[1.35rem] bg-slate-50 p-4">
+                          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
+                            Rank
+                          </p>
+                          <p className="mt-2 font-display text-3xl font-semibold text-slate-950">
+                            {communityProfile.rank ? `#${communityProfile.rank}` : "-"}
+                          </p>
+                        </div>
+                        <div className="rounded-[1.35rem] bg-slate-50 p-4">
+                          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
+                            Answers
+                          </p>
+                          <p className="mt-2 font-display text-3xl font-semibold text-slate-950">
+                            {communityProfile.answersCount}
+                          </p>
+                        </div>
+                      </div>
+                      <div className="space-y-3">
+                        <p className="text-sm font-semibold text-slate-700">Unlocked badges</p>
+                        <CommunityBadges badges={communityProfile.badges} />
+                      </div>
+                      <div className="flex flex-wrap gap-3">
+                        <Button asChild>
+                          <Link href="/asksvgu/ask">Ask a question</Link>
+                        </Button>
+                        <Button asChild variant="outline">
+                          <Link href="/asksvgu/leaderboard">See leaderboard</Link>
+                        </Button>
+                      </div>
+                    </>
+                  ) : (
+                    <div className="rounded-[1.35rem] border border-dashed border-slate-300 p-5 text-sm leading-7 text-slate-500">
+                      AskSVGU activity will start showing up here once you ask, answer, and earn your first reputation points.
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+
+              <Card className="border-white/85 bg-gradient-to-br from-slate-950 via-deep-blue to-academic-blue text-white">
+                <CardContent className="space-y-5 p-6">
+                  <div>
+                    <StatusPill variant="spotlight" className="border-white/20 bg-white/15 text-white">
+                      Campus Buddy
+                    </StatusPill>
+                    <h2 className="mt-4 font-display text-2xl font-semibold">
+                      SVGU AI now feels like a student-side copilot.
+                    </h2>
+                    <p className="mt-3 text-sm leading-7 text-blue-100">
+                      Use the AI buddy for planning, announcement summaries, and quick campus guidance without leaving your student shell.
+                    </p>
+                  </div>
+                  <div className="space-y-3">
+                    {buddyPrompts.map((prompt) => (
+                      <Link
+                        key={prompt}
+                        href={`/chatbot?prompt=${encodeURIComponent(prompt)}`}
+                        className="block rounded-[1.2rem] border border-white/15 bg-white/10 px-4 py-3 text-sm text-white/90 transition hover:bg-white/15"
+                      >
+                        {prompt}
+                      </Link>
+                    ))}
+                  </div>
+                  <Button asChild variant="outline" className="border-white/20 bg-white/10 text-white hover:bg-white/15 hover:text-white">
+                    <Link href="/chatbot">Open SVGU AI</Link>
+                  </Button>
+                </CardContent>
+              </Card>
+            </div>
+
+            <Card className="border-white/85 bg-white/90">
+              <CardHeader className="border-b border-slate-100 pb-5">
+                <div className="flex items-center justify-between gap-3">
+                  <div>
+                    <StatusPill variant="spotlight">Subject breakdown</StatusPill>
+                    <CardTitle className="mt-3 text-2xl text-slate-950">
+                      Subject-wise attendance
+                    </CardTitle>
+                  </div>
+                  {attendance ? (
+                    <StatusPill variant="live">Updated {formatDate(attendance.lastSyncedAt || attendance.fetchedAt)}</StatusPill>
+                  ) : null}
                 </div>
+              </CardHeader>
+              <CardContent className="space-y-4 pt-6">
+                {loadingAttendance ? (
+                  <>
+                    <Skeleton className="h-24 w-full" />
+                    <Skeleton className="h-24 w-full" />
+                  </>
+                ) : attendance?.subjects.length ? (
+                  attendance.subjects.map((subject) => (
+                    <div key={subject.name} className="rounded-[1.35rem] border border-slate-100 bg-slate-50/80 p-4">
+                      <div className="mb-3 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                        <div>
+                          <p className="font-semibold text-slate-900">{subject.name}</p>
+                          <p className="mt-1 text-sm text-slate-500">
+                            {subject.present}/{subject.total} classes attended
+                          </p>
+                        </div>
+                        <StatusPill variant={subject.percentage >= 75 ? "live" : subject.percentage >= 50 ? "progress" : "coming"}>
+                          {subject.percentage}%
+                        </StatusPill>
+                      </div>
+                      <Progress value={subject.percentage} />
+                    </div>
+                  ))
+                ) : showStudentAttendance ? (
+                  <div className="rounded-[1.35rem] border border-dashed border-slate-300 p-6 text-center text-sm text-slate-500">
+                    No live attendance data is available yet.
+                  </div>
+                ) : (
+                  <div className="rounded-[1.35rem] border border-dashed border-slate-300 p-6 text-center text-sm text-slate-500">
+                    Subject-level ERP attendance appears here for student accounts.
+                  </div>
+                )}
               </CardContent>
             </Card>
           </div>
 
-          {/* Sidebar Content */}
-          <div className="space-y-8">
-            
-            {/* Student Profile Card */}
-            <Card className="border border-gray-200">
-              <CardHeader className="text-center border-b border-gray-200">
-                <Avatar className="h-20 w-20 mx-auto mb-4">
-                  <AvatarImage src={user?.profileImageUrl} alt={userName} />
-                  <AvatarFallback className="text-lg font-semibold bg-academic-blue text-white">
-                    {user?.firstName ? `${user.firstName[0]}${user.lastName?.[0] || ''}` : 'S'}
+          <div className="space-y-6">
+            <Card className="border-white/85 bg-white/90">
+              <CardHeader className="border-b border-slate-100 text-center">
+                <Avatar className="mx-auto mb-4 h-20 w-20 ring-4 ring-white shadow-premium">
+                  <AvatarImage src={user?.profile?.avatarUrl} alt={userName} />
+                  <AvatarFallback className="bg-gradient-to-br from-academic-blue to-blue-500 text-lg font-semibold text-white">
+                    {userInitials}
                   </AvatarFallback>
                 </Avatar>
-                <CardTitle className="text-lg text-slate-text">{userName}</CardTitle>
-                <p className="text-sm text-gray-500">{user?.email}</p>
+                <CardTitle className="text-2xl text-slate-950">{userName}</CardTitle>
+                <p className="text-sm text-slate-500">{user?.studentId || "Student profile"}</p>
               </CardHeader>
-              <CardContent className="p-6">
-                <div className="space-y-4">
-                  <div className="flex justify-between">
-                    <span className="text-sm text-gray-500">Student ID</span>
-                    <span className="text-sm font-medium">2024001</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-sm text-gray-500">Course</span>
-                    <span className="text-sm font-medium">B.Tech CSE</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-sm text-gray-500">Semester</span>
-                    <span className="text-sm font-medium">6th</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-sm text-gray-500">Year</span>
-                    <span className="text-sm font-medium">3rd Year</span>
-                  </div>
+              <CardContent className="space-y-4 pt-6 text-sm">
+                <div className="flex items-center justify-between rounded-2xl bg-slate-50 px-4 py-3">
+                  <span className="text-slate-500">Student ID</span>
+                  <span className="font-semibold text-slate-900">{user?.studentId || "N/A"}</span>
+                </div>
+                <div className="flex items-center justify-between rounded-2xl bg-slate-50 px-4 py-3">
+                  <span className="text-slate-500">Class ID</span>
+                  <span className="font-semibold text-slate-900">
+                    {user?.classId || user?.profile?.classId || "N/A"}
+                  </span>
+                </div>
+                <div className="flex items-center justify-between rounded-2xl bg-slate-50 px-4 py-3">
+                  <span className="text-slate-500">Course</span>
+                  <span className="font-semibold text-slate-900">
+                    {user?.profile?.course || "Pending ERP sync"}
+                  </span>
+                </div>
+                <div className="flex items-center justify-between rounded-2xl bg-slate-50 px-4 py-3">
+                  <span className="text-slate-500">Semester</span>
+                  <span className="font-semibold text-slate-900">
+                    {user?.profile?.semester || "Pending ERP sync"}
+                  </span>
                 </div>
               </CardContent>
             </Card>
 
-            {/* Recent Results */}
-            <Card className="border border-gray-200">
-              <CardHeader className="border-b border-gray-200">
-                <CardTitle className="text-lg font-semibold text-slate-text flex items-center">
-                  <Award className="h-5 w-5 mr-2" />
-                  Recent Results
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="p-6">
-                <div className="space-y-4">
-                  {results?.slice(0, 5).map((result: any, index: number) => (
-                    <div key={index} className="flex items-center justify-between p-3 border border-gray-100 rounded-lg">
-                      <div>
-                        <p className="text-sm font-medium text-slate-text">{result.subject}</p>
-                        <p className="text-xs text-gray-500">{result.marks}/{result.maxMarks}</p>
-                      </div>
-                      <Badge 
-                        variant={result.grade.startsWith('A') ? 'default' : result.grade.startsWith('B') ? 'secondary' : 'destructive'}
-                        className={result.grade.startsWith('A') ? 'bg-success-green hover:bg-success-green' : ''}
-                      >
-                        {result.grade}
-                      </Badge>
-                    </div>
-                  )) || <p className="text-gray-500 text-sm italic">No recent results</p>}
+            <Card className="border-white/85 bg-white/90">
+              <CardHeader className="border-b border-slate-100 pb-5">
+                <div className="flex items-center gap-2">
+                  <Clock3 className="h-5 w-5 text-academic-blue" />
+                  <CardTitle className="text-xl text-slate-950">Sync status</CardTitle>
                 </div>
+              </CardHeader>
+              <CardContent className="space-y-3 pt-6 text-sm leading-7 text-slate-600">
+                {attendance ? (
+                  <>
+                    <p>
+                      Source:{" "}
+                      <span className="font-semibold text-slate-900">
+                        {attendance.source === "cache" ? "Cached" : "Official ERP"}
+                      </span>
+                    </p>
+                    <p>
+                      Last synced:{" "}
+                      <span className="font-semibold text-slate-900">
+                        {formatDate(attendance.lastSyncedAt || attendance.fetchedAt)}
+                      </span>
+                    </p>
+                  </>
+                ) : (
+                  <p>Attendance will refresh from ERP after login and whenever you tap refresh.</p>
+                )}
               </CardContent>
             </Card>
 
-            {/* Announcements */}
-            <Card className="border border-gray-200">
-              <CardHeader className="border-b border-gray-200">
-                <CardTitle className="text-lg font-semibold text-slate-text flex items-center">
-                  <BookOpen className="h-5 w-5 mr-2" />
-                  Latest Updates
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="p-6">
-                <div className="space-y-4">
-                  {announcements?.slice(0, 3).map((announcement: any, index: number) => (
-                    <div key={index} className="p-3 border border-gray-100 rounded-lg">
-                      <div className="flex justify-between items-start mb-2">
-                        <h4 className="text-sm font-medium text-slate-text">{announcement.title}</h4>
-                        <span className="text-xs text-gray-500">{new Date(announcement.date).toLocaleDateString()}</span>
-                      </div>
-                      <p className="text-xs text-gray-600 mb-2">{announcement.description}</p>
-                      <Badge variant="outline" className="text-xs">
-                        {announcement.subject}
-                      </Badge>
-                    </div>
-                  )) || <p className="text-gray-500 text-sm italic">No recent announcements</p>}
+            <Card className="border-white/85 bg-white/90">
+              <CardHeader className="border-b border-slate-100 pb-5">
+                <div className="flex items-center gap-2">
+                  <BookOpen className="h-5 w-5 text-academic-blue" />
+                  <CardTitle className="text-xl text-slate-950">Latest updates</CardTitle>
                 </div>
+              </CardHeader>
+              <CardContent className="space-y-4 pt-6">
+                {loadingAnnouncements ? (
+                  <Skeleton className="h-24 w-full" />
+                ) : announcements.length > 0 ? (
+                  announcements.slice(0, 3).map((announcement) => (
+                    <div key={announcement.id} className="rounded-[1.25rem] border border-slate-100 bg-slate-50/80 p-4">
+                      <div className="mb-2 flex items-start justify-between gap-3">
+                        <h4 className="font-semibold text-slate-900">{announcement.title}</h4>
+                        <StatusPill variant={announcement.priority === "high" ? "coming" : "progress"}>
+                          {announcement.priority || "normal"}
+                        </StatusPill>
+                      </div>
+                      <p className="line-clamp-3 text-sm leading-6 text-slate-600">{announcement.content}</p>
+                      <p className="mt-3 text-xs uppercase tracking-[0.18em] text-slate-500">
+                        {announcement.department || "General"} / {formatDate(announcement.createdAt)}
+                      </p>
+                    </div>
+                  ))
+                ) : (
+                  <p className="rounded-[1.25rem] border border-dashed border-slate-300 p-5 text-sm text-slate-500">
+                    No announcements yet.
+                  </p>
+                )}
               </CardContent>
             </Card>
           </div>
         </div>
       </div>
-    </div>
+    </StudentShell>
   );
 }

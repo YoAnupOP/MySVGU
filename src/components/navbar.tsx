@@ -1,9 +1,10 @@
 "use client";
 
-import { useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useAuth } from "@/hooks/useAuth";
+import { Bell, ChevronDown, GraduationCap, LogOut, Sparkles, User } from "lucide-react";
+
+import ThemeToggle from "@/components/theme-toggle";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import {
@@ -13,149 +14,120 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { 
-  GraduationCap, 
-  Bell, 
-  ChevronDown,
-  LayoutDashboard,
-  Calendar,
-  Megaphone,
-  Bot,
-  LogOut,
-  User
-} from "lucide-react";
+import { useAuth } from "@/hooks/useAuth";
+import { isStudentNavigationActive, studentNavigation } from "@/lib/student-navigation";
+import { cn } from "@/lib/utils";
 
 export default function Navbar() {
   const pathname = usePathname();
-  const { user } = useAuth();
-  const [showNotifications, setShowNotifications] = useState(false);
+  const { user, logout } = useAuth();
 
-  const handleLogout = () => {
-    // PROTOTYPE MODE - Just redirect to landing page
-    // TODO: Implement real logout when adding authentication
-    window.location.href = "/landing";
-  };
-
-  const userName = user?.firstName ? `${user.firstName} ${user.lastName || ''}`.trim() : 'Student';
-  const userInitials = user?.firstName ? `${user.firstName[0]}${user.lastName?.[0] || ''}` : 'S';
-
-  const navigationItems = [
-    { 
-      path: "/dashboard", 
-      label: "Dashboard", 
-      icon: LayoutDashboard,
-      isActive: pathname === "/" || pathname === "/dashboard"
-    },
-    { 
-      path: "/timetable", 
-      label: "Timetable", 
-      icon: Calendar,
-      isActive: pathname === "/timetable"
-    },
-    { 
-      path: "/announcements", 
-      label: "Updates", 
-      icon: Megaphone,
-      isActive: pathname === "/announcements"
-    },
-    { 
-      path: "/chatbot", 
-      label: "AI Assistant", 
-      icon: Bot,
-      isActive: pathname === "/chatbot"
-    },
-  ];
+  const userName = user?.name || "Student";
+  const userIdentifier = user?.studentId || "No ID";
+  const userInitials = user?.name
+    ? user.name
+        .split(" ")
+        .map((namePart: string) => namePart[0])
+        .join("")
+        .slice(0, 2)
+        .toUpperCase()
+    : "S";
 
   return (
-    <nav className="bg-card-white shadow-sm border-b border-gray-200 sticky top-0 z-50">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="flex justify-between items-center h-16">
-          
-          {/* Logo and Brand */}
-          <div className="flex items-center">
-            <Link href="/" className="flex items-center">
-              <GraduationCap className="h-8 w-8 text-academic-blue mr-2" />
-              <span className="text-xl font-bold text-slate-text">MySVGU</span>
-            </Link>
-            
-            {/* Desktop Navigation */}
-            <div className="hidden md:block ml-10">
-              <div className="flex items-baseline space-x-4">
-                {navigationItems.map((item) => (
-                  <Link key={item.path} href={item.path}>
-                    <Button
-                      variant={item.isActive ? "default" : "ghost"}
-                      className={`text-sm font-medium transition-colors ${
-                        item.isActive 
-                          ? "bg-academic-blue text-white hover:bg-deep-blue" 
-                          : "text-slate-text hover:text-academic-blue"
-                      }`}
-                    >
-                      <item.icon className="h-4 w-4 mr-2" />
-                      {item.label}
-                    </Button>
-                  </Link>
-                ))}
-              </div>
+    <nav className="theme-nav sticky top-0 z-50 border-b backdrop-blur-xl">
+      <div className="mx-auto flex h-18 max-w-7xl items-center justify-between px-4 sm:px-6 lg:px-8">
+        <div className="flex items-center gap-4">
+          <Link href="/dashboard" className="flex items-center gap-3">
+            <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-gradient-to-br from-academic-blue to-blue-500 text-white shadow-[0_18px_35px_rgba(49,107,255,0.28)]">
+              <GraduationCap className="h-5 w-5" />
             </div>
+            <div className="hidden sm:block">
+              <p className="font-display text-xl font-semibold text-slate-900">MySVGU</p>
+              <p className="text-xs text-slate-500">Smart campus super-app</p>
+            </div>
+          </Link>
+
+          <div className="hidden items-center gap-2 lg:flex">
+            {studentNavigation.map((item) => {
+              const isActive = isStudentNavigationActive(pathname, item.path);
+              return (
+                <Link key={item.path} href={item.path}>
+                  <Button
+                    variant={isActive ? "default" : "ghost"}
+                    className={cn(
+                      "h-10 rounded-full px-4 text-sm",
+                      isActive
+                        ? "bg-academic-blue text-white shadow-[0_18px_35px_rgba(49,107,255,0.22)]"
+                        : "text-slate-600 hover:bg-blue-50 hover:text-academic-blue",
+                    )}
+                  >
+                    <item.icon className="h-4 w-4" />
+                    {item.label}
+                  </Button>
+                </Link>
+              );
+            })}
           </div>
-          
-          {/* Profile Section */}
-          <div className="flex items-center space-x-4">
-            
-            {/* Notifications */}
-            <Button
-              variant="ghost"
-              size="sm"
-              className="relative p-2 rounded-full text-slate-text hover:bg-gray-100 transition-colors"
-              onClick={() => setShowNotifications(!showNotifications)}
-            >
-              <Bell className="h-5 w-5" />
-              <span className="sr-only">Notifications</span>
-              {/* Notification badge */}
-              <span className="absolute -top-1 -right-1 h-3 w-3 bg-red-500 rounded-full"></span>
-            </Button>
-            
-            {/* Profile Dropdown */}
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button
-                  variant="ghost"
-                  className="flex items-center space-x-2 p-2 rounded-lg hover:bg-gray-50 transition-colors"
-                >
-                  <Avatar className="h-8 w-8">
-                    <AvatarImage src={user?.profileImageUrl} alt={userName} />
-                    <AvatarFallback className="text-sm font-semibold bg-academic-blue text-white">
-                      {userInitials}
-                    </AvatarFallback>
-                  </Avatar>
-                  <span className="text-sm font-medium text-slate-text hidden sm:block">
-                    {userName}
-                  </span>
-                  <ChevronDown className="h-4 w-4 text-gray-400" />
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="w-56">
-                <div className="px-3 py-2">
-                  <p className="text-sm font-medium text-slate-text">{userName}</p>
-                  <p className="text-xs text-gray-500">{user?.email}</p>
+        </div>
+
+        <div className="flex items-center gap-2 sm:gap-3">
+          <div className="hidden items-center gap-2 rounded-full border border-white/80 bg-white/80 px-3 py-1.5 text-xs font-medium text-slate-600 shadow-sm md:flex">
+            <Sparkles className="h-3.5 w-3.5 text-academic-blue" />
+            Campus-ready
+          </div>
+
+          <ThemeToggle iconOnly className="rounded-full shadow-sm" />
+
+          <Button
+            variant="outline"
+            size="icon"
+            className="hidden rounded-full shadow-sm md:inline-flex"
+          >
+            <Bell className="h-4 w-4" />
+            <span className="sr-only">Notifications</span>
+          </Button>
+
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button
+                variant="outline"
+                className="h-11 rounded-full px-2.5 shadow-sm sm:px-3.5"
+              >
+                <Avatar className="h-8 w-8 ring-2 ring-white">
+                  <AvatarImage src={user?.profile?.avatarUrl} alt={userName} />
+                  <AvatarFallback className="bg-gradient-to-br from-academic-blue to-blue-500 text-xs font-semibold text-white">
+                    {userInitials}
+                  </AvatarFallback>
+                </Avatar>
+                <div className="hidden text-left sm:block">
+                  <p className="text-sm font-semibold text-slate-900">{userName}</p>
+                  <p className="text-xs text-slate-500">{userIdentifier}</p>
                 </div>
-                <DropdownMenuSeparator />
-                <DropdownMenuItem className="cursor-pointer">
-                  <User className="h-4 w-4 mr-2" />
-                  Profile Settings
-                </DropdownMenuItem>
-                <DropdownMenuSeparator />
-                <DropdownMenuItem 
-                  className="cursor-pointer text-red-600 focus:text-red-600"
-                  onClick={handleLogout}
-                >
-                  <LogOut className="h-4 w-4 mr-2" />
-                  Sign Out
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
-          </div>
+                <ChevronDown className="h-4 w-4 text-slate-400" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-64 rounded-2xl p-2 shadow-xl backdrop-blur-xl">
+              <div className="rounded-2xl bg-slate-50/90 px-3 py-3">
+                <p className="font-semibold text-slate-900">{userName}</p>
+                <p className="text-xs text-slate-500">{userIdentifier}</p>
+                <p className="mt-2 text-xs text-slate-600">Signed in to your smart student workspace.</p>
+              </div>
+              <DropdownMenuSeparator />
+              <div className="px-1 py-1.5">
+                <ThemeToggle className="w-full justify-start" />
+              </div>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem className="cursor-pointer rounded-xl">
+                <User className="mr-2 h-4 w-4" />
+                Profile settings
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem className="cursor-pointer rounded-xl text-red-600 focus:text-red-600" onClick={logout}>
+                <LogOut className="mr-2 h-4 w-4" />
+                Sign out
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
       </div>
     </nav>
